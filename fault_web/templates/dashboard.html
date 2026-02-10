@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Fault Dashboard</title>
+    <style>
+      body { font-family: Arial, sans-serif; margin: 24px; }
+      .top { display:flex; justify-content:space-between; align-items:center; gap:16px; flex-wrap:wrap; }
+      .card { border:1px solid #ddd; border-radius:10px; padding:16px; }
+      .muted { color:#666; font-size: 12px; }
+      #log { white-space: pre; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+      .row { display:flex; gap:16px; flex-wrap:wrap; }
+      .row .card { flex:1; min-width: 280px; }
+      button { padding: 8px 12px; border-radius: 8px; border: 1px solid #bbb; cursor:pointer; }
+    </style>
+  </head>
+  <body>
+    <div class="top">
+      <h2>Live Prediction Dashboard</h2>
+      <div class="muted" id="status">Connecting…</div>
+    </div>
+
+    <div class="row">
+      <div class="card">
+        <div><b>Latest</b></div>
+        <div id="latestLine" style="margin-top:10px;">—</div>
+        <div class="muted" id="latestMeta" style="margin-top:6px;">—</div>
+      </div>
+
+      <div class="card">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <b>Logs</b>
+          <button id="clearBtn">Clear</button>
+        </div>
+        <div class="muted">Newest at top</div>
+        <div id="log" style="margin-top:10px;"></div>
+      </div>
+    </div>
+
+    <script>
+      // initial snapshot from server render
+      const INITIAL_LINES = {{ (initial_lines or []) | tojson }};
+    </script>
+
+    <!-- Socket.IO client from CDN -->
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <script src="/static/dashboard.js"></script>
+  </body>
+</html>
