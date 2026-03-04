@@ -17,10 +17,10 @@
   ========================== */
   function getAccuracyColor(acc) {
     // Note: Adjusted thresholds to handle 0.0-1.0 scale
-    if (acc >= 0.90) return "#2ecc71";
-    if (acc >= 0.75) return "#94e073";
-    if (acc >= 0.50) return "#f1c40f";
-    if (acc >= 0.25) return "#e67e22";
+    if (acc >= 90) return "#2ecc71";
+    if (acc >= 75) return "#94e073";
+    if (acc >= 50) return "#f1c40f";
+    if (acc >= 25) return "#e67e22";
     return "#e74c3c";
   }
 
@@ -31,6 +31,8 @@
     const text = label.toLowerCase();
     if (text.includes("healthy")) return "status-healthy";
     if (text.includes("off")) return "status-off";
+    if (text.includes("belt")) return "status-belt_fault";
+    if (text.includes("rusty")) return "status-rusty";
     return "status-fault"; 
   }
 
@@ -38,7 +40,7 @@
       UPDATE MAIN CARDS
   ========================== */
   function updateStatus(label, accuracy) {
-    const accDisplay = (accuracy * 100).toFixed(0) + "%";
+    const accDisplay = (accuracy).toFixed(1) + "%";
     const accColor = getAccuracyColor(accuracy);
 
     accuracyCard.innerText = accDisplay;
@@ -56,11 +58,15 @@
     const row = document.createElement("div");
     row.className = "event-row";
 
-    const accPercent = (accuracy * 100).toFixed(0) + "%";
+    const accPercent = (accuracy).toFixed(1) + "%";
     const color = getAccuracyColor(accuracy);
 
     const labelClass = label.toLowerCase().includes("healthy") ? "label-healthy" : 
-                       label.toLowerCase().includes("off") ? "label-off" : "label-fault";
+                       label.toLowerCase().includes("off") ? "label-off" : 
+                       label.toLowerCase().includes("belt") ? "label-loose_belt" :
+                       label.toLowerCase().includes("bearing_fault") ? "label-bearing_fault" :
+
+                       "label-fault";
 
     row.innerHTML = `
       <span style="display:flex; justify-content:center;">
@@ -106,58 +112,72 @@
   /* =========================
       RECEIVE NEW RESULT
   ========================== */
+  /* =========================
+    RECEIVE NEW RESULT
+========================== */
   socket.on("new_result", (msg) => {
-    if (!msg || !msg.prediction) return;
+      if (!msg || !msg.prediction) return;
 
-    const label = msg.prediction.label || "Unknown";
-    const accuracy = msg.prediction.confidence ?? 0;
-    const timestamp = msg.timestamp ? new Date(msg.timestamp).toLocaleString() : new Date().toLocaleString();
+      // 1. Get exact label from Python and convert to lowercase for comparison
+      const rawLabel = msg.prediction.label || "Unknown";
+      const label = rawLabel.toLowerCase();
+      const accuracy = msg.prediction.confidence ?? 0;
+      const timestamp = msg.timestamp ? new Date(msg.timestamp).toLocaleString() : new Date().toLocaleString();
 
-    updateStatus(label, accuracy);
-    addRow(label, accuracy, timestamp);
+      updateStatus(rawLabel, accuracy);
+      addRow(rawLabel, accuracy, timestamp);
 
-    // VIDEO UPDATE LOGIC
-    if (faultVideo && videoSource) {
-      let newVideo = "";
+      // VIDEO UPDATE LOGIC
+      if (faultVideo && videoSource) {
+          let newVideo = "";
+          let displayTitle = "";
 
-      if (label.toLowerCase().includes("healthy")) {
-        newVideo = VIDEO_PATH + "healthy.mp4";
-        faultText.innerText = "Healthy Line";
-      } 
+          // 2. Clearer Priority Logic
+          if (label.includes("healthy")) {
+              newVideo = VIDEO_PATH + "healthy.mp4";
+              displayTitle = "Healthy Line";
+          } 
+          else if (label.includes("off")) {
+              newVideo = VIDEO_PATH + "off.mp4";
+              displayTitle = "Off State";
+          }
+          else if (label.includes("belt")) { // Using "belt" covers "Belt_Fault" or "belt fault"
+              newVideo = VIDEO_PATH + "belt.mp4";
+              displayTitle = "Belt Fault Detected";
+          } 
 
-      else if (label.toLowerCase().includes("off")) {
-        newVideo = VIDEO_PATH + "off.mp4";
-        faultText.innerText = "Off State";
+          else if (label.includes("waiting")) {
+              newVideo = VIDEO_PATH + "waiting.mp4";
+              displayTitle = "Waiting for Fault";
+          }
+          else {
+              newVideo = VIDEO_PATH + "waiting.mp4";
+              displayTitle = rawLabel; // Show the actual unknown label
+          }
+
+          if (faultText) {
+              faultText.innerText = displayTitle;
+          }
+
+          // 3. Only change source if it's different to prevent flickering
+          // We use .includes() because videoSource.src returns the FULL URL (http://...)
+          if (!videoSource.src.toLowerCase().includes(newVideo.toLowerCase())) {
+              console.log("Status changed! Switching video to:", newVideo); // Debugging line
+              
+              faultVideo.classList.add("video-fade");
+
+              setTimeout(() => {
+                  videoSource.src = newVideo;
+                  faultVideo.load();
+                  
+                  faultVideo.oncanplay = () => {
+                      faultVideo.play().catch(e => console.log("Playback error:", e));
+                      faultVideo.classList.remove("video-fade");
+                      faultVideo.oncanplay = null;
+                  };
+              }, 100); 
+          }
       }
-
-      else if (label.toLowerCase().includes("belt fault")) {
-        newVideo = VIDEO_PATH + "belt.mp4";
-        faultText.innerText = "Belt Fault Detected";
-      } 
-      else {
-        newVideo = VIDEO_PATH + "waiting.mp4";
-        faultText.innerText = "Waiting";
-        faultText.innerText = label;
-      }
-
-      // Only change source if it's different to prevent flickering
-    if (!videoSource.src.includes(newVideo)) {
-        // 1. Fade out
-        faultVideo.classList.add("video-fade");
-
-        setTimeout(() => {
-          videoSource.src = newVideo;
-          faultVideo.load();
-          
-          // 2. Fade back in once ready
-          faultVideo.oncanplay = () => {
-            faultVideo.play();
-            faultVideo.classList.remove("video-fade");
-            faultVideo.oncanplay = null;
-          };
-        }, 500); 
-      }
-    }
-  }); 
+  });
 
 })();
