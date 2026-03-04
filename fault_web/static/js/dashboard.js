@@ -83,7 +83,7 @@
   /* =========================
       SOCKET CONNECTION
   ========================== */
-  const socket = io("https://unhesitantly-unresuscitating-jazlyn.ngrok-free.dev", {
+  const socket = io("https://yadiel-nonefficient-eda.ngrok-free.dev", {
     transports: ["websocket"]
   });
 
@@ -109,6 +109,73 @@
     connectionCard.style.color = "#e67e22";
   });
 
+  function handleNewResult(msg) {
+    if (!msg || !msg.prediction) return;
+
+    // 1. Get exact label from Python and convert to lowercase for comparison
+    const rawLabel = msg.prediction.label || "Unknown";
+    const label = rawLabel.toLowerCase();
+    const accuracy = msg.prediction.confidence ?? 0;
+
+    // IMPORTANT:
+    // Your backend sometimes sends timestamp as ms int, sometimes string.
+    // Handle both safely:
+    let timestamp;
+    if (msg.timestamp) {
+      const d = new Date(msg.timestamp);
+      timestamp = isNaN(d.getTime()) ? new Date().toLocaleString() : d.toLocaleString();
+    } else {
+      timestamp = new Date().toLocaleString();
+    }
+
+    updateStatus(rawLabel, accuracy);
+    addRow(rawLabel, accuracy, timestamp);
+
+    // VIDEO UPDATE LOGIC
+    if (faultVideo && videoSource) {
+        let newVideo = "";
+        let displayTitle = "";
+
+        if (label.includes("healthy")) {
+            newVideo = VIDEO_PATH + "healthy.mp4";
+            displayTitle = "Healthy Line";
+        } 
+        else if (label.includes("off")) {
+            newVideo = VIDEO_PATH + "off.mp4";
+            displayTitle = "Off State";
+        }
+        else if (label.includes("belt")) {
+            newVideo = VIDEO_PATH + "belt.mp4";
+            displayTitle = "Belt Fault Detected";
+        } 
+        else if (label.includes("waiting")) {
+            newVideo = VIDEO_PATH + "waiting.mp4";
+            displayTitle = "Waiting for Fault";
+        }
+        else {
+            newVideo = VIDEO_PATH + "waiting.mp4";
+            displayTitle = rawLabel;
+        }
+
+        if (faultText) faultText.innerText = displayTitle;
+
+        if (!videoSource.src.toLowerCase().includes(newVideo.toLowerCase())) {
+            faultVideo.classList.add("video-fade");
+
+            setTimeout(() => {
+                videoSource.src = newVideo;
+                faultVideo.load();
+
+                faultVideo.oncanplay = () => {
+                    faultVideo.play().catch(e => console.log("Playback error:", e));
+                    faultVideo.classList.remove("video-fade");
+                    faultVideo.oncanplay = null;
+                };
+            }, 100);
+        }
+    }
+}
+
   /* =========================
       RECEIVE NEW RESULT
   ========================== */
@@ -116,6 +183,8 @@
     RECEIVE NEW RESULT
 ========================== */
   socket.on("new_result", (msg) => {
+    console.log("Received new result:", msg);
+      handleNewResult(msg);
       if (!msg || !msg.prediction) return;
 
       // 1. Get exact label from Python and convert to lowercase for comparison
@@ -178,6 +247,23 @@
               }, 100); 
           }
       }
+  });
+
+  socket.on("init_events", (data) => {
+    if (!data || !Array.isArray(data.events)) return;
+
+    // data.events are in DEVICE payload format:
+    // { device_id, timestamp, prediction:{label,confidence}, metrics... }
+    // Convert each to the new_result format expected by handleNewResult.
+    data.events.forEach((p) => {
+      console.log("Processing event:", p);
+      if (!p || !p.prediction) return;
+
+      handleNewResult({
+        prediction: p.prediction,
+        timestamp: p.timestamp
+      });
+    });
   });
 
 })();

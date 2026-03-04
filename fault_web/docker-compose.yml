@@ -1,0 +1,24 @@
+services:
+  fault_web_app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: fault_web_app
+    env_file:
+      - .env
+    ports:
+      - "5050:5000"
+    restart: unless-stopped
+
+  # test_device:
+  #   image: python:3.11-slim
+  #   working_dir: /test
+  #   depends_on:
+  #     - fault_web_app
+  #   volumes:
+  #     - ./test_device.py:/test/test_device.py:ro
+  #   command: >
+  #     sh -lc "pip install -q python-socketio[client] &&
+  #             python /test/test_device.py"
+  #   environment:
+  #     SERVER_URL: "http://fault_web_app:5000"
